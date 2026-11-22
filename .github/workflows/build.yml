@@ -1,0 +1,25 @@
+name: macOS arm64
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          swift --version
+      - run: Scripts/test.sh
+      - run: Scripts/build.sh release
+      - name: Archive local artifacts
+        run: ditto -c -k --keepParent dist/release Mac-Arctis-Manager-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mac-Arctis-Manager-arm64
+          path: Mac-Arctis-Manager-arm64.zip

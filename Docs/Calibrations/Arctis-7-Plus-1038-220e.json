@@ -1,0 +1,8 @@
+{
+  "interface": 5,
+  "reportID": 0,
+  "length": 64,
+  "prefix": [69],
+  "game": { "offset": 1, "muted": 0, "centered": 100 },
+  "chat": { "offset": 2, "muted": 0, "centered": 100 }
+}
