@@ -26,6 +26,8 @@ The sweep produced input report ID `0x00` with 64-byte payloads on interface 5. 
 
 Offline replay through `WheelCalibration` decoded all 29 captured reports and confirmed the two endpoints and center.
 
+In a later unplug test, the app still showed a connected receiver after its audio output disappeared. The HID diagnostic listed no matching interfaces at that point and found the receiver again in a later check. The app now checks the current HID device list on each refresh, and the user confirmed that the updated menu detects an unplugged receiver. Audio recovery after reconnect still needs a live test. The offline tests and release build pass with the change.
+
 ## Applying a verified calibration
 
 The app bundle includes the [1038:220e calibration](Calibrations/Arctis-7-Plus-1038-220e.json) from the sweep above. To override it, save a profile verified with a passive capture to `~/Library/Application Support/Mac Arctis Manager/WheelCalibration.json` and choose **Diagnostics → Retry**.

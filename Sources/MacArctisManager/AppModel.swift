@@ -33,7 +33,6 @@ final class AppModel: ObservableObject {
     private var wheelProfile: WheelCalibration?
     private var profileError: String?
     private var hidError: IOReturn?
-    private var interfaceIDs = Set<UInt64>()
     private let hid = HIDDeviceManager(product: HIDDeviceManager.arctis7Plus, usagePages: [0xff00, 0xffc0])
     private var mixer: OpaquePointer?
     private var route: [PlaybackDevice] = []
@@ -47,10 +46,8 @@ final class AppModel: ObservableObject {
         mix = controller.mix
         outputUID = UserDefaults.standard.string(forKey: "outputUID") ?? ""
         reloadWheelProfile()
-        hid.onMatch = { [weak self] interface, added in
-            guard let self else { return }
-            if added { self.interfaceIDs.insert(interface.id) } else { self.interfaceIDs.remove(interface.id) }
-            self.updateWheelStatus()
+        hid.onMatch = { [weak self] _, _ in
+            self?.updateWheelStatus()
         }
         hid.onError = { [weak self] status in
             Self.log.error("HID callback failed (\(status))")
@@ -112,13 +109,13 @@ final class AppModel: ObservableObject {
     }
 
     private func updateWheelStatus() {
-        let present = !interfaceIDs.isEmpty || (hidError != nil && !hid.interfaces.isEmpty)
+        let present = !hid.interfaces.isEmpty
         if receiver && !present { controller.receiverRemoved() }
-        receiver = present
-        if let hidError {
-            wheelStatus = String(format: "HID open failed (0x%08x)", UInt32(bitPattern: hidError))
-        } else if !present {
+        if receiver != present { receiver = present }
+        if !present {
             wheelStatus = "Waiting for receiver"
+        } else if let hidError {
+            wheelStatus = String(format: "HID open failed (0x%08x)", UInt32(bitPattern: hidError))
         } else if let profileError {
             wheelStatus = profileError
         } else {
@@ -150,9 +147,13 @@ final class AppModel: ObservableObject {
 
     private func refresh() {
         loginStatus = SMAppService.mainApp.status
-        if hidError != nil {
-            let present = !hid.interfaces.isEmpty
-            if present != receiver { startHID() }
+        let present = !hid.interfaces.isEmpty
+        if present != receiver {
+            if present && hidError != nil {
+                startHID()
+            } else {
+                updateWheelStatus()
+            }
         }
         let devices = PlaybackDevice.all()
         let physical = devices.filter(\.physical)
