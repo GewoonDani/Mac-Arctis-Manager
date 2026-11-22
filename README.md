@@ -17,6 +17,10 @@ The build places the app, driver, installer and diagnostic executables in `dist/
 
 ## Install and route audio
 
+Download the app ZIP and `ArctisAudio.pkg` from [GitHub Releases](https://github.com/GewoonDani/Mac-Arctis-Manager/releases/latest), then extract the app.
+
+**Gatekeeper.** The GitHub build uses ad-hoc signing for the app and driver and has no Apple notarization. macOS may warn that it cannot verify the app or installer. If you trust the download, try opening the file first, then go to **System Settings → Privacy & Security** and choose **Open Anyway** if macOS offers it. You may need to confirm separately for the app and the installer. [Apple Support](https://support.apple.com/en-us/102445)
+
 1. Open `ArctisAudio.pkg`, complete the installer and restart macOS when convenient. Administrator credentials are required to install the HAL bundle. When building from source, the package is in `dist/release/`.
 2. Open Audio MIDI Setup and check both **Arctis Game** and **Arctis Chat**. The app executable also supports a read-only listing:
 
