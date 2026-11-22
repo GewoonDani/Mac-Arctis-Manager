@@ -4,6 +4,7 @@
 <dict>
     <key>CFBundleIdentifier</key><string>org.macarctis.manager</string>
     <key>CFBundleExecutable</key><string>MacArctisManager</string>
+    <key>CFBundleIconFile</key><string>AppIcon.icns</string>
     <key>CFBundleName</key><string>Mac Arctis Manager</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>

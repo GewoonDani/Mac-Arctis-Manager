@@ -24,7 +24,7 @@ install -m 755 "$bin/MacArctisManager" "$app/Contents/MacOS/MacArctisManager"
 install -m 755 "$bin/arctis-hid" "$stage/arctis-hid"
 install -m 644 Packaging/App-Info.plist "$app/Contents/Info.plist"
 install -m 644 Packaging/Driver-Info.plist "$driver/Contents/Info.plist"
-install -m 644 LICENSE THIRD_PARTY.md "$app/Contents/Resources/"
+install -m 644 LICENSE THIRD_PARTY.md Packaging/AppIcon.icns "$app/Contents/Resources/"
 install -m 644 Docs/Calibrations/Arctis-7-Plus-1038-220e.json "$app/Contents/Resources/"
 xcrun clang -arch arm64 -mmacosx-version-min=14.0 -std=c17 -O2 -Wall -Wextra -Werror \
     -fvisibility=hidden -bundle Driver/VirtualAudioDriver.c -framework CoreAudio -framework CoreFoundation \
