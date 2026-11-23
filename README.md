@@ -1,56 +1,81 @@
-# Mac Arctis Manager
+<p align="center">
+  <img src="Packaging/AppIcon.png" alt="" width="88">
+</p>
 
-A native macOS menu bar app for routing separate Game and Chat audio streams to a SteelSeries Arctis 7+ USB receiver. Requires Apple Silicon, macOS 14 or later, and Xcode with Swift 6 to build from source.
+<h1 align="center">Mac Arctis Manager</h1>
 
-The app includes a physical ChatMix wheel calibration verified on an Arctis 7+ USB receiver with ID `1038:220e`. Manual ChatMix is also available. The app works without SteelSeries GG or Sonar.
+<p align="center">
+  <strong>ChatMix for the SteelSeries Arctis 7+ on macOS.</strong><br>
+  Balance game audio and Discord from your headset wheel or the menu bar, without SteelSeries GG or Sonar.
+</p>
 
-**Development status.** The wheel has been verified live on one Mac. Reconnect behavior and installation of a notarized release on a clean Mac still need verification. Offline tests cover the two virtual audio streams and the mixer.
+<p align="center">
+  <a href="https://github.com/GewoonDani/Mac-Arctis-Manager/releases/latest"><strong>Download</strong></a>
+  · <a href="#quick-start">Quick start</a>
+  · <a href="#test-and-report">Test and report</a>
+</p>
 
-## Build and test
+<p align="center">
+  <img src="Docs/menu-bar.png" alt="Mac Arctis Manager menu with the Game and Chat balance slider, output picker, and diagnostics" width="360"><br>
+  <sub>Preview of the app’s menu with example routing and ChatMix values.</sub>
+</p>
+
+## Compatibility
+
+- **Mac** — Apple Silicon, macOS 14 or later.
+- **Headset** — SteelSeries Arctis 7+ with the USB receiver `1038:220e`. The physical ChatMix wheel has been verified on one Mac.
+- **Testing status** — Offline tests cover both virtual audio streams and the mixer. Audio recovery after reconnect and installation of a notarized build on a clean Mac still need live testing.
+
+## Quick start
+
+1. Download the app ZIP and `ArctisAudio.pkg` from [GitHub Releases](https://github.com/GewoonDani/Mac-Arctis-Manager/releases/latest). Open the package, install the virtual audio driver with administrator credentials, and restart macOS when convenient.
+2. Extract **Mac Arctis Manager.app**, move it to Applications, and open it. Click the headphones icon in the menu bar. The app automatically selects a single matching Arctis 7+ output. You can also choose it from the **Output** picker.
+3. If prompted, choose **Allow Virtual Audio Input**. macOS calls this **Microphone** access because the driver provides two loopback monitor inputs. The app opens those two inputs only.
+4. Set your audio outputs as follows. In **Audio MIDI Setup**, you can check whether both virtual outputs are available.
+
+   | Audio source | Select |
+   | --- | --- |
+   | Game audio, music, or apps that follow the macOS sound output | **Arctis Game** |
+   | Discord or another voice chat app | **Arctis Chat** as the app’s output |
+   | Voice chat microphone | Your physical headset microphone as the app’s input |
+
+5. Turn the headset’s ChatMix wheel and look for **Wheel active**, or adjust the slider in the menu. If you see **Open Input Monitoring Settings**, grant the app access there and relaunch it.
+
+The app keeps routing while the menu is closed. Enable **Open at login** if you want it to start automatically.
+
+> The GitHub build is ad-hoc signed and has no Apple notarization. If macOS blocks the app or installer and you trust the download, try opening it first, then check **System Settings → Privacy & Security → Open Anyway**. You may need to confirm each file separately. [Apple Support](https://support.apple.com/en-us/102445)
+
+## Test and report
+
+Play game audio and join a Discord call at the same time. Check that you can hear both at the center position and that turning the wheel fully toward either side isolates that source. Unplug and reconnect the USB receiver and see whether audio resumes. If an app switched outputs, reselect its virtual output.
+
+If something fails, share your macOS version, headset model, and the app’s **Diagnostics** output in a [GitHub issue](https://github.com/GewoonDani/Mac-Arctis-Manager/issues). If the wheel does not respond, you can also [capture a passive USB log](Docs/Hardware.md).
+
+### Test with two tones
+
+With the app reporting **Routing to Arctis 7+**, start at a low headset volume and run `dist/release/arctis-tone` from a local build. It plays 440 Hz to **Arctis Game** and 660 Hz to **Arctis Chat** for 20 seconds. In **Diagnostics**, both input peaks should rise and the rendered frame count should advance.
+
+## Build from source
+
+Use Xcode with Swift 6 and run these commands from the repository root.
 
 ```sh
 Scripts/test.sh
 Scripts/build.sh
 ```
 
-The build places the app, driver, installer and diagnostic executables in `dist/release/`. It signs locally with an ad-hoc identity by default and makes no system changes.
-
-## Install and route audio
-
-Download the app ZIP and `ArctisAudio.pkg` from [GitHub Releases](https://github.com/GewoonDani/Mac-Arctis-Manager/releases/latest), then extract the app.
-
-**Gatekeeper.** The GitHub build uses ad-hoc signing for the app and driver and has no Apple notarization. macOS may warn that it cannot verify the app or installer. If you trust the download, try opening the file first, then go to **System Settings → Privacy & Security** and choose **Open Anyway** if macOS offers it. You may need to confirm separately for the app and the installer. [Apple Support](https://support.apple.com/en-us/102445)
-
-1. Open `ArctisAudio.pkg`, complete the installer and restart macOS when convenient. Administrator credentials are required to install the HAL bundle. When building from source, the package is in `dist/release/`.
-2. Open Audio MIDI Setup and check both **Arctis Game** and **Arctis Chat**. The app executable also supports a read-only listing:
-
-   ```sh
-   "dist/release/Mac Arctis Manager.app/Contents/MacOS/MacArctisManager" --list-audio
-   ```
-
-3. Copy **Mac Arctis Manager.app** to Applications and open it. Use the headphones icon in the menu bar. Automatic output selects the unique Arctis 7+ USB playback device. Use the output picker if the receiver has a different audio name.
-4. Use **Allow Virtual Audio Input** when prompted. macOS calls this **Microphone** access because the driver provides loopback monitor input streams. The app opens those two inputs only. Set Discord's input to your physical headset microphone.
-5. Choose **Arctis Chat** for Discord's output. Choose **Arctis Game** for your game or set it as the system output for apps that follow the system default. The app keeps routing while the menu is closed and leaves default audio devices under your control. Use **Open at login** after moving the app to Applications if you want it to launch automatically.
-6. Turn the physical ChatMix wheel and check for **Wheel active**. If the app shows **Open Input Monitoring Settings**, grant the app access there and relaunch it.
-
-## Verify simultaneous playback
-
-With the app reporting **Routing to Arctis 7+**, start at low headset volume and run:
+The build places the ad-hoc signed app, driver, installer, and diagnostic tools in `dist/release/`. The build and tests run without installing the driver. For a read-only list of the current audio devices, run:
 
 ```sh
-dist/release/arctis-tone
+"dist/release/Mac Arctis Manager.app/Contents/MacOS/MacArctisManager" --list-audio
 ```
-
-It plays 440 Hz to Arctis Game and 660 Hz to Arctis Chat simultaneously for 20 seconds. Both should be audible at center. Slide fully toward Game and then Chat to hear each separately. In Diagnostics, both input peaks should become nonzero and the rendered frame counter should advance. Repeat with a game/music app and Discord. Unplug the receiver while playing, wait for the route to report it unavailable, then reconnect and verify playback resumes. If an application switched its own assigned output, reselect its virtual destination. Capture the status and diagnostics if playback fails.
-
-## Capture the wheel
-
-If your Arctis 7+ wheel does not respond with the included calibration, follow [Hardware investigation](Docs/Hardware.md) to capture and label a passive HID sweep.
 
 ## Uninstall
 
-1. Select a physical device as macOS's sound output and revert app-specific output selections as desired. Disable **Open at login** and quit Mac Arctis Manager.
-2. Run `Scripts/uninstall-driver.sh`, confirm the removal and restart macOS when convenient.
-3. Move **Mac Arctis Manager.app** to Trash. Saved settings and the optional calibration remain in your user account so they can be reused if you reinstall.
+1. Switch macOS and your apps back to a physical output. Turn off **Open at login** and quit Mac Arctis Manager.
+2. From the repository root, run `Scripts/uninstall-driver.sh`, confirm removal, and restart macOS when convenient.
+3. Move **Mac Arctis Manager.app** to Trash. Saved settings and any custom wheel calibration remain in your user account for reuse.
 
-The app and plug-in use public APIs with SIP enabled. See [Architecture](Docs/Architecture.md), [Distribution](Docs/Distribution.md), [License](LICENSE) and [Attribution](THIRD_PARTY.md).
+The app and driver use public APIs with SIP enabled.
+
+[Architecture](Docs/Architecture.md) · [Distribution](Docs/Distribution.md) · [MIT License](LICENSE) · [Third-party attribution](THIRD_PARTY.md)
