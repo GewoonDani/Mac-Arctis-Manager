@@ -1,6 +1,24 @@
 import CoreAudio
 import Foundation
 
+func setVirtualOutputsActive(_ active: Bool) {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyTranslateBundleIDToPlugIn,
+        mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    var bundleID = "org.macarctis.manager.driver" as CFString
+    var plugin = AudioObjectID(kAudioObjectUnknown)
+    var size = UInt32(MemoryLayout.size(ofValue: plugin))
+    guard withUnsafePointer(to: &bundleID, { qualifier in
+        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address,
+            UInt32(MemoryLayout<CFString>.size), qualifier, &size, &plugin)
+    }) == noErr, plugin != kAudioObjectUnknown else { return }
+
+    address.mSelector = 0x6172_7072 // 'arpr'
+    var presence = active ? kCFBooleanTrue! : kCFBooleanFalse!
+    withUnsafePointer(to: &presence) { value in
+        _ = AudioObjectSetPropertyData(plugin, &address, 0, nil, UInt32(MemoryLayout<CFBoolean>.size), value)
+    }
+}
+
 struct PlaybackDevice: Equatable, Identifiable {
     let id: AudioDeviceID
     let uid: String

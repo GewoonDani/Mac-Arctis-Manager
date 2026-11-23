@@ -44,9 +44,10 @@ installer_options=()
 if [[ -n "${INSTALLER_SIGN_IDENTITY:-}" ]]; then
     installer_options=(--sign "$INSTALLER_SIGN_IDENTITY" --timestamp)
 fi
+driver_version=$(plutil -extract CFBundleShortVersionString raw "$driver/Contents/Info.plist")
 COPYFILE_DISABLE=1 pkgbuild --root "$stage/payload" --component-plist Packaging/Driver-Package.plist \
     --install-location /Library/Audio/Plug-Ins/HAL \
-    --identifier org.macarctis.manager.driver.pkg --version 0.1.0 --ownership recommended \
+    --identifier org.macarctis.manager.driver.pkg --version "$driver_version" --ownership recommended \
     ${installer_options[@]+"${installer_options[@]}"} "$stage/ArctisAudio.pkg"
 pkgutil --payload-files "$stage/ArctisAudio.pkg"
 

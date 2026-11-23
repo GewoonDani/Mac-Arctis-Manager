@@ -3,12 +3,21 @@ import ServiceManagement
 import SwiftUI
 
 @MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let model = AppModel()
+
+    func applicationWillTerminate(_ notification: Notification) {
+        model.shutDown()
+    }
+}
+
+@MainActor
 struct MacArctisManager: App {
-    @StateObject private var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         MenuBarExtra("Mac Arctis Manager", systemImage: "headphones") {
-            ControlPanel(model: model)
+            ControlPanel(model: appDelegate.model)
         }
         .menuBarExtraStyle(.window)
     }

@@ -74,6 +74,12 @@ final class AppModel: ObservableObject {
         arctisMixerStop(mixer)
     }
 
+    func shutDown() {
+        timer?.invalidate()
+        closeMixer()
+        setVirtualOutputsActive(false)
+    }
+
     func setBalance(_ value: Double) {
         controller.setManual(balance: value)
         UserDefaults.standard.set(controller.mix.balance, forKey: "balance")
@@ -146,6 +152,7 @@ final class AppModel: ObservableObject {
     }
 
     private func refresh() {
+        setVirtualOutputsActive(true)
         loginStatus = SMAppService.mainApp.status
         let present = !hid.interfaces.isEmpty
         if present != receiver {

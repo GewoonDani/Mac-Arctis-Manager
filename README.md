@@ -41,7 +41,7 @@
 
 5. Turn the headset’s ChatMix wheel and look for **Wheel active**, or adjust the slider in the menu. If you see **Open Input Monitoring Settings**, grant the app access there and relaunch it.
 
-The app keeps routing while the menu is closed. Enable **Open at login** if you want it to start automatically.
+The app keeps routing while the menu is closed. **Arctis Game** and **Arctis Chat** appear while the app runs and disappear when you quit it. After a force quit, this takes about five seconds. macOS or an audio app may select another output when a virtual output disappears. Enable **Open at login** if you want the app to start automatically.
 
 > The GitHub build is ad-hoc signed and has no Apple notarization. If macOS blocks the app or installer and you trust the download, try opening it first, then check **System Settings → Privacy & Security → Open Anyway**. You may need to confirm each file separately. [Apple Support](https://support.apple.com/en-us/102445)
 

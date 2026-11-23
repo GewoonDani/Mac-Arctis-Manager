@@ -1,13 +1,16 @@
 #include <CoreAudio/AudioServerPlugIn.h>
+#include <dispatch/dispatch.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <mach/mach_time.h>
 #include <string.h>
+#include <time.h>
 
 enum {
     Game = 2, GameIn, GameOut, Chat, ChatIn, ChatOut,
-    Period = 512, MonitorDelay = 512, Capacity = 16384
+    Period = 512, MonitorDelay = 512, Capacity = 16384,
+    AppPresence = 'arpr', PresenceTimeout = 5
 };
 static const Float64 rate = 48000;
 static const AudioObjectID devices[] = {Game, Chat};
@@ -24,6 +27,20 @@ static double ticksPerFrame;
 static _Atomic ULONG refs;
 static AudioServerPlugInDriverInterface interface;
 static AudioServerPlugInDriverInterface *vtable = &interface;
+static AudioServerPlugInHostRef audioHost;
+static dispatch_queue_t presenceQueue;
+static dispatch_source_t presenceTimer;
+static uint64_t presenceDeadline;
+static _Atomic bool published;
+
+static void publishDevices(bool available) {
+    if (atomic_exchange(&published, available) == available) return;
+    const AudioObjectPropertyAddress changes[] = {
+        {kAudioObjectPropertyOwnedObjects, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain},
+        {kAudioPlugInPropertyDeviceList, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain}
+    };
+    audioHost->PropertiesChanged(audioHost, kAudioObjectPlugInObject, 2, changes);
+}
 
 static int indexFor(AudioObjectID id) {
     if (id >= Game && id <= GameOut) return 0;
@@ -58,7 +75,14 @@ static HRESULT query(void *driver, REFIID uuid, void **out) {
 }
 
 static OSStatus initialize(AudioServerPlugInDriverRef d, AudioServerPlugInHostRef host) {
-    (void)d; (void)host;
+    (void)d;
+    audioHost = host;
+    presenceQueue = dispatch_queue_create("org.macarctis.manager.driver.presence", DISPATCH_QUEUE_SERIAL);
+    presenceTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, presenceQueue);
+    dispatch_source_set_event_handler(presenceTimer, ^{
+        if (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) >= presenceDeadline) publishDevices(false);
+    });
+    dispatch_activate(presenceTimer);
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
     ticksPerFrame = (1e9 * timebase.denom) / (timebase.numer * rate);
@@ -90,6 +114,8 @@ typedef struct {
         UInt32 integer;
         Float64 real;
         CFStringRef string;
+        CFBooleanRef boolean;
+        AudioServerPlugInCustomPropertyInfo custom;
         AudioObjectID objects[4];
         AudioValueRange range;
         AudioChannelLayout layout;
@@ -133,10 +159,8 @@ static bool property(AudioObjectID id, const AudioObjectPropertyAddress *a, CFSt
         case kAudioObjectPropertyManufacturer:
             VALUE(string, CFSTR("Mac Arctis Manager"));
         case kAudioObjectPropertyOwnedObjects:
-            if (plugin) {
-                memcpy(p->data.objects, devices, sizeof(devices));
-                p->size = sizeof(devices);
-            } else if (isDevice) {
+            if (plugin) break;
+            if (isDevice) {
                 if (input || global) p->data.objects[p->size++] = device + 1;
                 if (output || global) p->data.objects[p->size++] = device + 2;
                 p->size *= sizeof(AudioObjectID);
@@ -147,13 +171,24 @@ static bool property(AudioObjectID id, const AudioObjectPropertyAddress *a, CFSt
     if (plugin) {
         switch (a->mSelector) {
             case kAudioPlugInPropertyBundleID: VALUE(string, CFSTR("org.macarctis.manager.driver"));
+            case kAudioObjectPropertyOwnedObjects:
             case kAudioPlugInPropertyDeviceList:
-                memcpy(p->data.objects, devices, sizeof(devices));
-                p->size = sizeof(devices);
+                if (atomic_load(&published)) {
+                    memcpy(p->data.objects, devices, sizeof(devices));
+                    p->size = sizeof(devices);
+                }
                 return true;
+            case kAudioObjectPropertyCustomPropertyInfoList:
+                VALUE(custom, ((AudioServerPlugInCustomPropertyInfo){AppPresence,
+                    kAudioServerPlugInCustomPropertyDataTypeCFPropertyList,
+                    kAudioServerPlugInCustomPropertyDataTypeNone}));
+            case AppPresence:
+                VALUE(boolean, atomic_load(&published) ? kCFBooleanTrue : kCFBooleanFalse);
             case kAudioPlugInPropertyTranslateUIDToDevice:
-                if (qualifier && CFEqual(qualifier, uid(0))) VALUE(integer, Game);
-                if (qualifier && CFEqual(qualifier, uid(1))) VALUE(integer, Chat);
+                if (qualifier && CFGetTypeID(qualifier) == CFStringGetTypeID() && atomic_load(&published)) {
+                    if (CFEqual(qualifier, uid(0))) VALUE(integer, Game);
+                    if (CFEqual(qualifier, uid(1))) VALUE(integer, Chat);
+                }
                 VALUE(integer, kAudioObjectUnknown);
             case kAudioPlugInPropertyBoxList:
             case kAudioPlugInPropertyClockDeviceList: return true;
@@ -227,7 +262,7 @@ static Boolean has(AudioServerPlugInDriverRef d, AudioObjectID id, pid_t pid, co
 static OSStatus settable(AudioServerPlugInDriverRef d, AudioObjectID id, pid_t pid,
                         const AudioObjectPropertyAddress *a, Boolean *out) {
     if (!has(d, id, pid, a)) return kAudioHardwareUnknownPropertyError;
-    *out = false;
+    *out = a->mSelector == AppPresence;
     return 0;
 }
 static OSStatus size(AudioServerPlugInDriverRef d, AudioObjectID id, pid_t pid, const AudioObjectPropertyAddress *a,
@@ -253,6 +288,7 @@ static OSStatus get(AudioServerPlugInDriverRef d, AudioObjectID id, pid_t pid, c
         if (a->mSelector == kAudioObjectPropertyName || a->mSelector == kAudioObjectPropertyManufacturer ||
             a->mSelector == kAudioPlugInPropertyBundleID || a->mSelector == kAudioDevicePropertyDeviceUID ||
             a->mSelector == kAudioDevicePropertyModelUID) CFRetain(p.data.string);
+        if (a->mSelector == AppPresence) CFRetain(p.data.boolean);
         memcpy(out, &p.data, p.size);
     }
     *outSize = p.size;
@@ -260,8 +296,22 @@ static OSStatus get(AudioServerPlugInDriverRef d, AudioObjectID id, pid_t pid, c
 }
 static OSStatus set(AudioServerPlugInDriverRef d, AudioObjectID id, pid_t pid, const AudioObjectPropertyAddress *a,
                    UInt32 qsize, const void *q, UInt32 count, const void *in) {
-    (void)d; (void)id; (void)pid; (void)a; (void)qsize; (void)q; (void)count; (void)in;
-    return kAudioHardwareUnsupportedOperationError;
+    if (!a || a->mSelector != AppPresence || !has(d, id, pid, a))
+        return kAudioHardwareUnsupportedOperationError;
+    CFBooleanRef value;
+    if (qsize || q || count != sizeof(value) || !in) return kAudioHardwareBadPropertySizeError;
+    memcpy(&value, in, sizeof(value));
+    if (!value || CFGetTypeID(value) != CFBooleanGetTypeID()) return kAudioHardwareIllegalOperationError;
+    const bool active = CFBooleanGetValue(value);
+    dispatch_async(presenceQueue, ^{
+        const uint64_t timeout = PresenceTimeout * NSEC_PER_SEC;
+        presenceDeadline = active ? clock_gettime_nsec_np(CLOCK_UPTIME_RAW) + timeout : 0;
+        dispatch_source_set_timer(presenceTimer, active ? dispatch_time(DISPATCH_TIME_NOW, timeout)
+                                                      : DISPATCH_TIME_FOREVER,
+                                  DISPATCH_TIME_FOREVER, 0);
+        publishDevices(active);
+    });
+    return 0;
 }
 
 static OSStatus start(AudioServerPlugInDriverRef d, AudioObjectID id, UInt32 clientID) {

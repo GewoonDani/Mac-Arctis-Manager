@@ -1,10 +1,27 @@
 #include <CoreAudio/AudioServerPlugIn.h>
 #include <assert.h>
+#include <dispatch/dispatch.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <string.h>
 
 typedef void *(*Factory)(CFAllocatorRef, CFUUIDRef);
+
+static dispatch_semaphore_t deviceListChanged;
+
+static OSStatus devicesChanged(AudioServerPlugInHostRef host, AudioObjectID id, UInt32 count,
+                               const AudioObjectPropertyAddress *addresses) {
+    (void)host;
+    assert(id == kAudioObjectPlugInObject && count == 2);
+    assert(addresses[0].mSelector == kAudioObjectPropertyOwnedObjects);
+    assert(addresses[1].mSelector == kAudioPlugInPropertyDeviceList);
+    dispatch_semaphore_signal(deviceListChanged);
+    return 0;
+}
+
+static void waitForDeviceChange(void) {
+    assert(dispatch_semaphore_wait(deviceListChanged, dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC)) == 0);
+}
 
 static UInt32 get(AudioServerPlugInDriverRef driver, AudioObjectID id, UInt32 scope,
                   UInt32 selector, void *buffer, UInt32 capacity) {
@@ -33,12 +50,27 @@ int main(int argc, char **argv) {
                                                               kAudioServerPlugInTypeUUID);
     assert(driver);
     CFRelease(factories);
-    struct AudioServerPlugInHostInterface host = {0};
+    deviceListChanged = dispatch_semaphore_create(0);
+    struct AudioServerPlugInHostInterface host = {.PropertiesChanged = devicesChanged};
     assert((*driver)->Initialize(driver, &host) == 0);
     const UInt32 global = kAudioObjectPropertyScopeGlobal;
+    const AudioObjectID plugIn = kAudioObjectPlugInObject;
     AudioObjectID devices[2];
-    assert(get(driver, kAudioObjectPlugInObject, global, kAudioPlugInPropertyDeviceList, devices, sizeof(devices))
-        == sizeof(devices));
+    assert(get(driver, plugIn, global, kAudioPlugInPropertyDeviceList, devices, sizeof(devices)) == 0);
+    assert(get(driver, plugIn, global, kAudioObjectPropertyOwnedObjects, devices, sizeof(devices)) == 0);
+    AudioServerPlugInCustomPropertyInfo property;
+    get(driver, plugIn, global, kAudioObjectPropertyCustomPropertyInfoList, &property, sizeof(property));
+    assert(property.mSelector == 'arpr' && property.mPropertyDataType == kAudioServerPlugInCustomPropertyDataTypeCFPropertyList);
+    const AudioObjectPropertyAddress presence = {property.mSelector, global, kAudioObjectPropertyElementMain};
+    Boolean writable = false;
+    assert((*driver)->IsPropertySettable(driver, plugIn, 0, &presence, &writable) == 0 && writable);
+    CFTypeRef value = CFSTR("wrong type");
+    assert((*driver)->SetPropertyData(driver, plugIn, 0, &presence, 0, NULL, sizeof(value), &value)
+        == kAudioHardwareIllegalOperationError);
+    value = kCFBooleanTrue;
+    assert((*driver)->SetPropertyData(driver, plugIn, 0, &presence, 0, NULL, sizeof(value), &value) == 0);
+    waitForDeviceChange();
+    assert(get(driver, plugIn, global, kAudioPlugInPropertyDeviceList, devices, sizeof(devices)) == sizeof(devices));
     assert(devices[0] != devices[1]);
 
     AudioObjectID in[2], out[2];
@@ -87,8 +119,19 @@ int main(int argc, char **argv) {
         assert(memcmp(actual, silence, sizeof(actual)) == 0);
         assert((*driver)->StopIO(driver, devices[i], 7) == 0);
     }
+    waitForDeviceChange(); // No renewal, as on force quit.
+    AudioObjectID republished[2];
+    assert(get(driver, plugIn, global, kAudioPlugInPropertyDeviceList, republished, sizeof(republished)) == 0);
+    assert((*driver)->SetPropertyData(driver, plugIn, 0, &presence, 0, NULL, sizeof(value), &value) == 0);
+    waitForDeviceChange();
+    assert(get(driver, plugIn, global, kAudioPlugInPropertyDeviceList, republished, sizeof(republished)) == sizeof(republished));
+    assert(memcmp(devices, republished, sizeof(devices)) == 0);
+    value = kCFBooleanFalse;
+    assert((*driver)->SetPropertyData(driver, plugIn, 0, &presence, 0, NULL, sizeof(value), &value) == 0);
+    assert(dispatch_semaphore_wait(deviceListChanged, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) == 0);
+    assert(get(driver, plugIn, global, kAudioPlugInPropertyDeviceList, republished, sizeof(republished)) == 0);
     (*driver)->Release(driver);
     CFRelease(plugin);
-    puts("HAL factory, properties, clock, dual stereo PCM isolation and underrun silence passed.");
+    puts("HAL visibility, factory, properties, clock, dual stereo PCM isolation and underrun silence passed.");
     return 0;
 }
